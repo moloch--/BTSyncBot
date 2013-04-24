@@ -248,9 +248,11 @@ class BTSyncBot(irc.IRCClient):
 
     def help(self, user, channel, msg):
         ''' Displays a helpful message '''
-        self.display(user, channel, " > Commands: BTSync Bot ", whisper=True)
-        self.display(user, channel, "-------------------------------------", whisper=True)
-
+        self.display(user, channel, " > Commands: BTSync Bot ")
+        self.display(user, channel, "-------------------------------------")
+        self.display(user, channel, "!addshare --name <name> --key <btsync key> --description <description>")
+        self.display(user, channel, "!getshare <share name>")
+        self.display(user, channel, "!search <search term>")
 
 
 ### Factory
