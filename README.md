@@ -1,7 +1,7 @@
 BTSyncBot
 =========
 
-Share BTSync keys via IRC.
+Share [BTSync](http://labs.bittorrent.com/experiments/sync.html) keys via IRC.
 
 
 Requirements
