@@ -25,11 +25,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models.BaseObject import BaseObject
 
+DBFILE_NAME = 'btsyncbot.db'
 
 metadata = BaseObject.metadata
 
 # This is a relative path ///
-engine = create_engine('sqlite:///btsyncdb.db')
+engine = create_engine('sqlite:///' + DBFILE_NAME)
 setattr(engine, 'echo', False)
 Session = sessionmaker(bind=engine, autocommit=True)
 dbsession = Session(autoflush=True)
@@ -38,7 +39,6 @@ dbsession = Session(autoflush=True)
 
 # Import models (or the tables won't get created)
 from models.Share import Share
-
 
 # Calling this will create the tables at the database
 create_tables = lambda: (setattr(engine, 'echo', True), metadata.create_all(engine))

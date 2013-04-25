@@ -29,18 +29,25 @@ from models.BaseObject import BaseObject
 class Share(BaseObject):
 
     name = Column(String(32), unique=True, nullable=False)
+    creator = Column(String(32), nullable=False)
     private_key = Column(String(32), unique=True, nullable=False)
     description = Column(String(255), nullable=False)
 
     @classmethod
     def by_id(cls, sid):
-        ''' Return the share object whose id is 'sid' '''
         return dbsession.query(cls).filter_by(id=sid).first()
 
     @classmethod
     def by_name(cls, sname):
-        ''' Return the share object whose name is 'sname' '''
         return dbsession.query(cls).filter_by(name=sname).first()
+
+    @classmethod
+    def by_private_key(cls, key):
+        return dbsession.query(cls).filter_by(private_key=key).first()
+
+    @classmethod
+    def by_creator(cls, nick):
+        return dbsession.query(cls).filter_by(creator=nick).all()
 
     @classmethod
     def by_search(cls, search):
@@ -51,3 +58,9 @@ class Share(BaseObject):
     @property
     def read_only(self):
         return self.private_key.startswith('R')
+
+    def __str__(self):
+        line = "[%s] %s: %s" % (self.creator, self.name, self.description)
+        if self.read_only:
+            line += " (read only)"
+        return line

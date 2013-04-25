@@ -7,28 +7,26 @@
 --------------------
 '''
 
-import re
+
 import os
 import sys
 import time
-import thread
 import logging
 import sqlite3
 import ConfigParser
 
-
-from models import dbsession, create_tables, Share
+from models import dbsession, create_tables, Share, DBFILE_NAME
 from argparse import ArgumentParser
-from string import ascii_letters, digits
 from twisted.application import internet
 from twisted.words.protocols import irc
 from twisted.internet import reactor, protocol
 
 
+
 ### Channel
 class ChannelSettings(object):
 
-    isMuted = False
+    is_muted = False
 
     def __init__(self, name, password=None, ignore=False):
         if name[0] == '&' or ignore:
@@ -58,7 +56,7 @@ class BTSyncBot(irc.IRCClient):
     nickname = "btsync"
     realname = "btsync"
     channels = {}
-    isMuted = False
+    is_muted = False
     defaults = {
         'level': 'debug',
         'nickname': "btsync",
@@ -75,9 +73,13 @@ class BTSyncBot(irc.IRCClient):
             "!mute": self.muteBot,
             "!stfu": self.muteBot,
             "!addshare": self.addShare,
+            "!add": self.addShare,
             "!search": self.search,
             "!getshare": self.getShare,
-            "!search": self.search
+            "!get": self.getShare,
+            "!search": self.search,
+            "!list": self.listShares,
+            "!ls": self.listShares,
         }
         self.addShareParser.add_argument('--name', nargs='*')
         self.addShareParser.add_argument('--key', nargs='?')
@@ -87,9 +89,9 @@ class BTSyncBot(irc.IRCClient):
     def __dbinit__(self):
         ''' Initializes the SQLite database '''
         logging.info("Initializing SQLite db ...")
-        if not os.path.exists('btsyncbot.db'):
+        if not os.path.exists(DBFILE_NAME):
             logging.info("Creating SQLite tables")
-            dbConn = sqlite3.connect("btsyncbot.db")
+            dbConn = sqlite3.connect(DBFILE_NAME)
             dbConn.close()
             create_tables()
 
@@ -175,70 +177,95 @@ class BTSyncBot(irc.IRCClient):
 
     def parseCommand(self, user, channel, msg):
         ''' Call whatever function corisponds to the command '''
-        command = msg.split(" ")[0]
+        command = msg.split(" ")[0].lower()
         msg = ' '.join(msg.split(' ')[1:])
         if command in self.public_commands:
             logging.debug("[Command]: <User: %s> <Channel: %s> <Msg: %s>" % (user, channel, msg))
             self.public_commands[command](user, channel, msg)
 
     def addShare(self, user, channel, msg):
+        ''' Add a user's shared key to the database '''
         args = self.addShareParser.parse_args(msg.split())
-        share = Share(
-            name=' '.join(args.name).lower(), 
-            private_key=args.key.upper(), 
-            description=' '.join(args.description)
-        )
-        dbsession.add(share)
-        dbsession.flush()
-        acceptMessage = "Succesfully added new share '%s' to database" % share.name
-        self.display(user, channel, acceptMessage)
+        shareName = ' '.join(args.name).lower()
+        shareKey = args.key.upper()
+        if Share.by_name(shareName) is None and Share.by_private_key(shareKey) is None:
+            share = Share(
+                name=shareName,
+                creator=user.lower(),
+                private_key=shareKey, 
+                description=' '.join(args.description)
+            )
+            dbsession.add(share)
+            dbsession.flush()
+            returnMessage = "Succesfully added new share '%s' to database" % share.name
+        else:
+            returnMessage = "Share already exists with that name or key"
+        self.display(user, channel, returnMessage)
 
     def getShare(self, user, channel, msg):
         share = Share.by_name(msg.lower())
         if share is not None:
-            self.display(user, channel, " %s: %s" % (share.name, share.private_key))
+            line = "%s: %s" % (share.name, share.private_key)
+            if share.read_only:
+                line += " (read only)"
+            self.display(user, channel, line)
         else:
-            self.display(user, channel, "No share found.")
+            self.display(user, channel, "Share not found with name '%s'" % msg.lower())
+            searchResults = len(Share.by_search(msg.lower()))
+            if 0 < searchResults <= 10:
+                self.display(user, channel, "%d similar share(s) found via search" % searchResults)
 
     def search(self, user, channel, msg):
+        ''' Search for shares in the database '''
         logging.info("Searching for '%s'" % msg)
         shares = Share.by_search(msg)
         if shares is None or 0 == len(shares):
             self.display(user, channel, "No results found")
-        elif len(shares) <= 5:
-            self.display(user, channel, "Found %d results" % len(shares))
+        elif len(shares) <= 10:
+            self.display(user, channel, " [Creator] Share Name : Share Private Key")
+            self.display(user, channel, "------------------------------------------")
             for share in shares:
-                self.display(user, channel, " %s: %s" % (share.name, share.description))
+                self.display(user, channel, str(share))
         else:
-            self.display(user, channel, "Too many results")
+            self.display(user, channel, "Too many results, narrow your search")
+
+    def listShares(self, user, channel, msg):
+        ''' Get shares by creator '''
+        shares = Share.by_creator(msg.lower())
+        if shares is not None and 0 < len(shares):
+            for share in shares:
+                self.display(user, channel, str(share))
+        else:
+            self.display(user, channel, "No shares created by '%s'" % msg.lower())
 
     def muteBot(self, user, channel, msg):
         ''' Toggle mute on/off '''
-        channelSettings = self.channels.get(channel, None)
-        if channelSettings is not None:
-            if channelSettings.isMuted:
-                channelSettings.isMuted = False
+        channel_settings = self.channels.get(channel, None)
+        if channel_settings is not None:
+            if channel_settings.is_muted:
+                channel_settings.is_muted = False
                 self.display(user, channel, "Mute: OFF - Responses will be public")
             else:
                 self.display(user, channel, "Mute: ON - Responses will be private")
-                channelSettings.isMuted = True
+                channel_settings.is_muted = True
         else:
             self.display(user, channel, "Cannot mute this channel.")
 
     def display(self, user, channel, message, whisper=False):
         ''' Intelligently wraps msg, based on mute setting '''
-        channelSettings = self.channels.get(channel, None)
-        if whisper or (channelSettings is not None and channelSettings.isMuted):
-            displayChannel = user
+        channel_settings = self.channels.get(channel, None)
+        if whisper or (channel_settings is not None and channel_settings.is_muted):
+            display_channel = user
         else:
-            displayChannel = channel
-        self.msg(displayChannel, message.encode('ascii', 'ignore'))
+            display_channel = channel
+        self.msg(display_channel, message.encode('ascii', 'ignore'))
 
     def joinChannel(self, user, channel, msg):
         ''' Admin command to get bot to join channel '''
         joinChan = msg.split(" ")
-        if len(joinChan) < 2: joinChan.append(None)
-        channel = ChannelSettings(joinChan[0], joinChan[1])
+        if len(joinChan) < 2: 
+            joinChan.append(None)
+        channel = channel_settings(joinChan[0], joinChan[1])
         self.channels[channel.name] = channel
         if channel.password is None:
             self.join(channel.name)
@@ -253,6 +280,7 @@ class BTSyncBot(irc.IRCClient):
         self.display(user, channel, "!addshare --name <name> --key <btsync key> --description <description>")
         self.display(user, channel, "!getshare <share name>")
         self.display(user, channel, "!search <search term>")
+        self.display(user, channel, "!mute - Mute the bot so responses are private only")
 
 
 ### Factory
