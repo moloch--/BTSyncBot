@@ -260,19 +260,6 @@ class BTSyncBot(irc.IRCClient):
             display_channel = channel
         self.msg(display_channel, message.encode('ascii', 'ignore'))
 
-    def joinChannel(self, user, channel, msg):
-        ''' Admin command to get bot to join channel '''
-        joinChan = msg.split(" ")
-        if len(joinChan) < 2: 
-            joinChan.append(None)
-        channel = channel_settings(joinChan[0], joinChan[1])
-        self.channels[channel.name] = channel
-        if channel.password is None:
-            self.join(channel.name)
-        else:
-            self.join(channel.name, channel.password)
-        logging.info("Joined channel %s" % channel.name)
-
     def help(self, user, channel, msg):
         ''' Displays a helpful message '''
         self.display(user, channel, " > Commands: BTSync Bot ")
@@ -280,7 +267,7 @@ class BTSyncBot(irc.IRCClient):
         self.display(user, channel, "!addshare --name <name> --key <btsync key> --description <description>")
         self.display(user, channel, "!getshare <share name>")
         self.display(user, channel, "!search <search term>")
-        self.display(user, channel, "!mute - Mute the bot so responses are private only")
+        self.display(user, channel, "!list <username>")
 
 
 ### Factory
