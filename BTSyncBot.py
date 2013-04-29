@@ -218,16 +218,19 @@ class BTSyncBot(irc.IRCClient):
     def search(self, user, channel, msg):
         ''' Search for shares in the database '''
         logging.info("Searching for '%s'" % msg)
-        shares = Share.by_search(msg)
-        if shares is None or 0 == len(shares):
-            self.display(user, channel, "No results found")
-        elif len(shares) <= 10:
-            self.display(user, channel, " [Creator] Share Name : Share Private Key")
-            self.display(user, channel, "------------------------------------------")
-            for share in shares:
-                self.display(user, channel, str(share))
+        if len(msg) <= 2:
+            self.display(user, channel, "Search term too short") 
         else:
-            self.display(user, channel, "Too many results, narrow your search")
+            shares = Share.by_search(msg)
+            if shares is None or 0 == len(shares):
+                self.display(user, channel, "No results found")
+            elif len(shares) <= 10:
+                self.display(user, channel, " [Creator] Share Name : Share Private Key")
+                self.display(user, channel, "------------------------------------------")
+                for share in shares:
+                    self.display(user, channel, str(share))
+            else:
+                self.display(user, channel, "Too many results, narrow your search")
 
     def listShares(self, user, channel, msg):
         ''' Get shares by creator '''
